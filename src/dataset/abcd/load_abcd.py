@@ -34,11 +34,15 @@ def process_dataset(fc_data, fc_id, id2gender, id2pearson, label_df):
             if not np.any(np.isnan(id2pearson[l])):
                 final_label.append(id2gender[l])
                 final_pearson.append(id2pearson[l])
+
     final_pearson = np.array(final_pearson)  # (7901, 360, 360)
     _, _, node_feature_size = final_pearson.shape  # node_feature_size: 360
+
+    # label encode
     encoder = preprocessing.LabelEncoder()
     encoder.fit(label_df["sex"])
     labels = encoder.transform(final_label)
+
     return final_pearson, labels
 
 

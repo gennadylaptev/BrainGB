@@ -47,9 +47,12 @@ def main(args):
         root_dir = os.path.join(self_dir, 'datasets/ABIDE/')
     else:
         root_dir = os.path.join(self_dir, 'datasets/')
+
+    # handle for loading Datasets
     dataset = BrainDataset(root=root_dir,
                            name=args.dataset_name,
                            pre_transform=get_transform(args.node_features))
+    # get targets
     y = get_y(dataset)
     num_features = dataset[0].x.shape[1]
     nodes_num = dataset.num_nodes
@@ -62,23 +65,40 @@ def main(args):
     accs, aucs, macros, exp_accs, exp_aucs, exp_macros = [], [], [], [], [], []
     for _ in range(args.repeat):
         seed_everything(random.randint(1, 1000000))  # use random seed for each run
+
+        # run stratified cross-validation
         skf = StratifiedKFold(n_splits=args.k_fold_splits, shuffle=True)
         for train_index, test_index in skf.split(dataset, y):
+            # init model instance
             model = build_model(args, device, model_name, num_features, nodes_num)
+
+            # set optimizer
             optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+            # split dataset
             train_set, test_set = dataset[train_index], dataset[test_index]
 
+            # create loaders for train and test
             train_loader = DataLoader(train_set, batch_size=args.train_batch_size, shuffle=False)
             test_loader = DataLoader(test_set, batch_size=args.test_batch_size, shuffle=False)
 
-            # train
-            test_micro, test_auc, test_macro = train_and_evaluate(model, train_loader, test_loader,
-                                                                  optimizer, device, args)
+            # train and eval
+            test_micro, test_auc, test_macro = train_and_evaluate(
+                model,
+                train_loader,
+                test_loader,
+                optimizer,
+                device,
+                args,
+            )
 
+            # evaluate again
             test_micro, test_auc, test_macro = evaluate(model, device, test_loader)
+            # print test metrics
             logging.info(f'(Initial Performance Last Epoch) | test_micro={(test_micro * 100):.2f}, '
                          f'test_macro={(test_macro * 100):.2f}, test_auc={(test_auc * 100):.2f}')
 
+            # store metrics for the current fold
             accs.append(test_micro)
             aucs.append(test_auc)
             macros.append(test_macro)
@@ -116,12 +136,14 @@ if __name__ == "__main__":
     parser.add_argument('--pooling', type=str,
                         choices=['sum', 'concat', 'mean'],
                         default='concat')
-                        
+
     parser.add_argument('--model_name', type=str, default='gcn')
+
     # gcn_mp_type choices: weighted_sum, bin_concate, edge_weight_concate, edge_node_concate, node_concate
-    parser.add_argument('--gcn_mp_type', type=str, default="weighted_sum") 
+    parser.add_argument('--gcn_mp_type', type=str, default="weighted_sum")
+
     # gat_mp_type choices: attention_weighted, attention_edge_weighted, sum_attention_edge, edge_node_concate, node_concate
-    parser.add_argument('--gat_mp_type', type=str, default="attention_weighted") 
+    parser.add_argument('--gat_mp_type', type=str, default="attention_weighted")
 
     parser.add_argument('--enable_nni', action='store_true')
     parser.add_argument('--n_GNN_layers', type=int, default=2)

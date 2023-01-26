@@ -15,23 +15,29 @@ import logging
 
 
 def dense_to_ind_val(adj):
-  
+    # compute edge_index and edge_attr from dense weight matrix
     assert adj.dim() >= 2 and adj.dim() <= 3
     assert adj.size(-1) == adj.size(-2)
 
     index = (torch.isnan(adj)==0).nonzero(as_tuple=True)
     edge_attr = adj[index]
 
+    # edge_index, edge_weights
     return torch.stack(index, dim=0), edge_attr
 
 
 class BrainDataset(InMemoryDataset):
     def __init__(self, root, name, transform=None, pre_transform: BaseTransform = None, view=0):
+
         self.view: int = view
         self.name = name.upper()
         self.filename_postfix = str(pre_transform) if pre_transform is not None else None
+
         assert self.name in ['PPMI', 'HIV', 'BP', 'ABCD', 'PNC', 'ABIDE']
+
         super(BrainDataset, self).__init__(root, transform, pre_transform)
+
+        # upload saved data
         self.data, self.slices, self.num_nodes = torch.load(self.processed_paths[0])
         logging.info('Loaded dataset: {}'.format(self.name))
 
@@ -72,6 +78,7 @@ class BrainDataset(InMemoryDataset):
                 adj, y = load_data_pnc(self.raw_dir)
             elif self.name == 'ABIDE':
                 adj, y = load_data_abide(self.raw_dir)
+
             y = torch.LongTensor(y)
             adj = torch.Tensor(adj)
             num_graphs = adj.shape[0]
@@ -97,6 +104,7 @@ class BrainDataset(InMemoryDataset):
             y = torch.Tensor(m['label']).long().flatten()
             y[y == -1] = 0
 
+        # collect all the graphs into a list
         data_list = []
         for i in range(num_graphs):
             edge_index, edge_attr = dense_to_ind_val(adj[i])
@@ -109,6 +117,7 @@ class BrainDataset(InMemoryDataset):
         if self.pre_transform is not None:
             data_list = [self.pre_transform(data) for data in data_list]
 
+        # collate datalist into dataset
         data, slices = self.collate(data_list)
         torch.save((data, slices, num_nodes), self.processed_paths[0])
 
